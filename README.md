@@ -4507,3 +4507,748 @@ export class CounterComponent {
 <!-- Same [(count)] syntax — no extra setup needed -->
 <app-counter [(count)]="parentCount" />
 ```
+
+---
+
+# Section 7: Enhancing Elements with Directives - Deep Dive
+
+> Lessons 150 (1min intro) and 152 (1min project setup) are skipped — no new concepts.
+
+---
+
+## 151. Understanding Directives
+
+**What is this:** What directives are and how they differ from components.
+
+**Description:** A directive adds behavior or structure to an existing element without creating a new one. Components are directives with a template. There are two other kinds: **attribute directives** (change the look or behavior of an element) and **structural directives** (add/remove elements from the DOM).
+
+**Examples:**
+
+```ts
+// Three kinds of directives:
+
+// 1. Component — directive WITH a template
+@Component({ selector: 'app-card', template: `<ng-content />` })
+export class CardComponent {}
+
+// 2. Attribute directive — changes an existing element's behavior/style
+// <p appHighlight>Hello</p>  ← same <p>, just enhanced
+
+// 3. Structural directive — adds/removes DOM elements
+// <p *ngIf="show">Hello</p>  ← <p> may or may not exist in the DOM
+// @for, @if are the modern built-in structural directives
+```
+
+---
+
+## 153. Analyzing a Built-in Attribute Directive: ngModel
+
+**What is this:** How `ngModel` works internally as an attribute directive.
+
+**Description:** `ngModel` is an attribute directive from `FormsModule`. It attaches to a form control element, listens for value changes, and syncs the element's value with a component property — bidirectionally. Understanding it as a directive explains why you must import `FormsModule` to use it.
+
+**Examples:**
+
+```ts
+// ngModel under the hood (simplified concept):
+// It does two things at once:
+// 1. [ngModel]="value"     → sets the element's value property
+// 2. (ngModelChange)="value = $event"  → listens for changes and updates the property
+
+// These are equivalent:
+<input [(ngModel)]="title" />
+<input [ngModel]="title" (ngModelChange)="title = $event" />
+
+// ngModel is just a directive — it needs FormsModule to be available
+import { FormsModule } from '@angular/forms';
+
+@Component({
+  standalone: true,
+  imports: [FormsModule], // ← directive is provided here
+  template: `<input [(ngModel)]="title" />`,
+})
+export class FormComponent {
+  title = '';
+}
+```
+
+---
+
+## 154. Analyzing a Built-in Structural Directive: ngIf
+
+**What is this:** How `*ngIf` works and what the `*` syntax desugars to.
+
+**Description:** The `*` prefix is syntactic sugar. `*ngIf="condition"` expands to `[ngIf]="condition"` on an `<ng-template>`. Angular uses the directive to decide whether to stamp the template into the DOM or remove it entirely — not just hide it.
+
+**Examples:**
+
+```ts
+// *ngIf syntactic sugar — these are identical:
+<p *ngIf="isLoggedIn">Welcome</p>
+
+<ng-template [ngIf]="isLoggedIn">
+  <p>Welcome</p>
+</ng-template>
+
+// Key point: *ngIf REMOVES the element from the DOM (not just hidden)
+// Compare:
+<p *ngIf="show">Removed from DOM when false</p>
+<p [style.display]="show ? 'block' : 'none'">Hidden with CSS, still in DOM</p>
+
+// Modern equivalent — prefer @if in new projects:
+@if (isLoggedIn) { <p>Welcome</p> }
+```
+
+---
+
+## 155. Getting Started with Custom Directives
+
+**What is this:** Creating your first attribute directive from scratch.
+
+**Description:** A custom attribute directive is a class decorated with `@Directive`. Its selector is typically an attribute in square brackets `[appMyDirective]`. Angular instantiates it whenever it finds that attribute on an element and injects the host `ElementRef` so you can interact with the DOM.
+
+**Examples:**
+
+```ts
+// highlight.directive.ts
+import { Directive, ElementRef, inject, OnInit } from '@angular/core';
+
+@Directive({
+  selector: '[appHighlight]', // matches any element with the appHighlight attribute
+  standalone: true,
+})
+export class HighlightDirective implements OnInit {
+  private el = inject(ElementRef);
+
+  ngOnInit() {
+    this.el.nativeElement.style.backgroundColor = 'yellow';
+  }
+}
+```
+
+```ts
+// Using it — import and apply the attribute
+@Component({
+  standalone: true,
+  imports: [HighlightDirective],
+  template: `<p appHighlight>This text has a yellow background.</p>`,
+})
+export class AppComponent {}
+```
+
+---
+
+## 156. Using Attribute Directives To Change Element Behavior
+
+**What is this:** Reacting to host events inside a directive to change element behavior dynamically.
+
+**Description:** Use the `host` property (or `@HostListener`) in the directive to listen for events on the element the directive is applied to. This keeps behavior encapsulated in the directive and out of the component.
+
+**Examples:**
+
+```ts
+import { Directive, ElementRef, inject } from '@angular/core';
+
+@Directive({
+  selector: '[appHighlight]',
+  standalone: true,
+  host: {
+    '(mouseenter)': 'onEnter()',
+    '(mouseleave)': 'onLeave()',
+  },
+})
+export class HighlightDirective {
+  private el = inject(ElementRef);
+
+  onEnter() {
+    this.el.nativeElement.style.backgroundColor = 'yellow';
+  }
+
+  onLeave() {
+    this.el.nativeElement.style.backgroundColor = '';
+  }
+}
+```
+
+```html
+<!-- Applied to any element — no component logic needed -->
+<p appHighlight>Hover over me</p>
+<button appHighlight>Or me</button>
+```
+
+---
+
+## 157. Working with Inputs in Custom Directives
+
+**What is this:** Making a directive configurable by accepting `input()` values from the parent.
+
+**Description:** Directives can declare inputs just like components. The parent passes values through attribute binding. This lets one directive cover many scenarios (e.g. a highlight directive that accepts the color).
+
+**Examples:**
+
+```ts
+import { Directive, ElementRef, inject, input, OnInit } from '@angular/core';
+
+@Directive({
+  selector: '[appHighlight]',
+  standalone: true,
+})
+export class HighlightDirective implements OnInit {
+  private el = inject(ElementRef);
+
+  color = input<string>('yellow');       // optional — defaults to yellow
+  hoverColor = input<string>('orange');  // color on hover
+
+  ngOnInit() {
+    this.el.nativeElement.style.backgroundColor = this.color();
+  }
+}
+```
+
+```html
+<!-- Default color -->
+<p appHighlight>Yellow background</p>
+
+<!-- Custom color -->
+<p appHighlight [color]="'lightblue'" [hoverColor]="'deepskyblue'">Blue background</p>
+```
+
+---
+
+## 158. Directives & Dependency Injection
+
+**What is this:** Injecting services into a directive the same way as in a component.
+
+**Description:** Directives participate in Angular's DI system fully. Use `inject()` in the class body to get a service. This enables directives to read from or write to shared state — for example, a directive that logs to an analytics service on click.
+
+**Examples:**
+
+```ts
+import { Directive, inject } from '@angular/core';
+import { LoggingService } from '../logging.service';
+
+@Directive({
+  selector: '[appTrackClick]',
+  standalone: true,
+  host: { '(click)': 'onClick()' },
+})
+export class TrackClickDirective {
+  private logger = inject(LoggingService);
+
+  onClick() {
+    this.logger.log('Element clicked');
+  }
+}
+```
+
+```ts
+// logging.service.ts
+@Injectable({ providedIn: 'root' })
+export class LoggingService {
+  log(message: string) {
+    console.log(`[Log] ${message}`);
+  }
+}
+```
+
+---
+
+## 159. Building Another Directive
+
+**What is this:** A second directive example — `appSafeLink` — that warns before navigating to an external URL.
+
+**Description:** This directive attaches to `<a>` elements, intercepts the click, and shows a confirmation dialog before allowing external navigation. It shows how directives compose cleanly with native HTML semantics.
+
+**Examples:**
+
+```ts
+import { Directive, inject, input } from '@angular/core';
+
+@Directive({
+  selector: 'a[appSafeLink]',  // only matches <a> elements with the attribute
+  standalone: true,
+  host: {
+    '(click)': 'onConfirm($event)',
+  },
+})
+export class SafeLinkDirective {
+  queryParam = input<string>('myapp');
+
+  onConfirm(event: MouseEvent) {
+    const confirmed = window.confirm('Do you want to leave this app?');
+    if (!confirmed) {
+      event.preventDefault(); // block navigation
+    }
+  }
+}
+```
+
+```html
+<a href="https://angular.dev" appSafeLink>Angular Docs</a>
+```
+
+---
+
+## 160. Building a Custom Structural Directive
+
+**What is this:** Creating a directive that conditionally adds or removes elements from the DOM.
+
+**Description:** Structural directives use `TemplateRef` (the template to stamp) and `ViewContainerRef` (the container to stamp it into). Calling `createEmbeddedView()` adds the template; `clear()` removes it. This is exactly how `*ngIf` works internally.
+
+**Examples:**
+
+```ts
+import { Directive, TemplateRef, ViewContainerRef, inject, input, effect } from '@angular/core';
+
+@Directive({
+  selector: '[appShowIf]',
+  standalone: true,
+})
+export class ShowIfDirective {
+  private template = inject(TemplateRef);
+  private container = inject(ViewContainerRef);
+
+  condition = input.required<boolean>({ alias: 'appShowIf' });
+
+  constructor() {
+    effect(() => {
+      if (this.condition()) {
+        this.container.createEmbeddedView(this.template); // add to DOM
+      } else {
+        this.container.clear(); // remove from DOM
+      }
+    });
+  }
+}
+```
+
+```html
+<!-- Works like *ngIf -->
+<p *appShowIf="isLoggedIn">Welcome back!</p>
+```
+
+---
+
+## 161. Structural Directives & Syntactic Sugar
+
+**What is this:** How the `*directive` shorthand expands to `<ng-template [directive]>`.
+
+**Description:** The `*` prefix is always syntactic sugar for `<ng-template>`. Understanding the expansion helps when you need to use `*ngIf` with `else`, pass context variables from `*ngFor`, or write custom structural directives with the correct input names.
+
+**Examples:**
+
+```html
+<!-- Sugar form -->
+<li *ngFor="let item of items; let i = index; trackBy: trackById">
+  {{ i }}: {{ item.name }}
+</li>
+
+<!-- Expanded form (what Angular actually compiles) -->
+<ng-template ngFor [ngForOf]="items" let-item let-i="index" [ngForTrackBy]="trackById">
+  <li>{{ i }}: {{ item.name }}</li>
+</ng-template>
+
+<!-- Custom directive — input alias must match the selector for * to work -->
+<!-- selector: '[appShowIf]', input alias: 'appShowIf' -->
+<p *appShowIf="isLoggedIn">...</p>
+<!-- expands to: -->
+<ng-template [appShowIf]="isLoggedIn"><p>...</p></ng-template>
+```
+
+---
+
+## 162. Host Directives & Composition
+
+**What is this:** Composing multiple directives onto a component's host element via `hostDirectives`.
+
+**Description:** `hostDirectives` lets a component apply other directives to itself without the parent needing to add them. This is Angular's version of directive composition — instead of inheritance, you compose behavior. Inputs and outputs from the host directive can be exposed on the component.
+
+**Examples:**
+
+```ts
+import { Component } from '@angular/core';
+import { HighlightDirective } from './highlight.directive';
+import { TrackClickDirective } from './track-click.directive';
+
+@Component({
+  selector: 'app-button',
+  standalone: true,
+  template: `<ng-content />`,
+  // These directives are applied to <app-button> automatically
+  hostDirectives: [
+    TrackClickDirective, // no inputs/outputs exposed
+    {
+      directive: HighlightDirective,
+      inputs: ['color'],   // expose HighlightDirective's input on <app-button>
+      outputs: [],
+    },
+  ],
+})
+export class ButtonComponent {}
+```
+
+```html
+<!-- Parent uses ButtonComponent — gets HighlightDirective behavior for free -->
+<app-button [color]="'lightgreen'">Save</app-button>
+<!-- No need to add appHighlight — it's composed in -->
+```
+
+---
+
+# Section 8: Transforming Values with Pipes - Deep Dive
+
+> Lesson 163 (1min intro) is skipped.
+
+---
+
+## 164. Making Sense of Pipes
+
+**What is this:** What pipes are, where they run, and why they exist.
+
+**Description:** A pipe transforms a value for display only — it does not mutate the underlying data. Pipes live entirely in the template, are applied with `|`, and receive the value on their left as input. Angular re-runs a pipe only when its input changes (pure pipes) or on every change detection cycle (impure pipes).
+
+**Examples:**
+
+```ts
+// Pipes sit between the data and the DOM — they never touch the source
+component property: 'hello world'
+        ↓  | uppercase
+template output: 'HELLO WORLD'   ← original property is still 'hello world'
+
+// Syntax: {{ value | pipeName }}
+// Pipes can be chained: {{ value | pipe1 | pipe2 }}
+// Pipes can accept arguments: {{ value | pipeName:arg1:arg2 }}
+```
+
+---
+
+## 165. Using Built-in Pipes
+
+**What is this:** The most commonly used Angular built-in pipes.
+
+**Description:** Angular ships many pipes in `@angular/common`. Standalone components import each one individually; module-based apps get them via `CommonModule`.
+
+**Examples:**
+
+```ts
+import { UpperCasePipe, LowerCasePipe, DatePipe, CurrencyPipe, DecimalPipe, PercentPipe } from '@angular/common';
+
+@Component({
+  standalone: true,
+  imports: [UpperCasePipe, LowerCasePipe, DatePipe, CurrencyPipe, DecimalPipe, PercentPipe],
+  template: `
+    <p>{{ 'hello' | uppercase }}</p>           <!-- HELLO -->
+    <p>{{ 'WORLD' | lowercase }}</p>           <!-- world -->
+    <p>{{ today | date }}</p>                  <!-- Jan 1, 2025 -->
+    <p>{{ today | date:'yyyy-MM-dd' }}</p>     <!-- 2025-01-01 -->
+    <p>{{ price | currency }}</p>              <!-- $1,234.56 -->
+    <p>{{ price | currency:'EUR':'symbol' }}</p> <!-- €1,234.56 -->
+    <p>{{ 3.14159 | number:'1.2-2' }}</p>     <!-- 3.14 -->
+    <p>{{ 0.85 | percent }}</p>               <!-- 85% -->
+  `,
+})
+export class DemoComponent {
+  today = new Date();
+  price = 1234.56;
+}
+```
+
+---
+
+## 166. More Built-in Pipes Examples
+
+**What is this:** Lesser-used but useful built-in pipes — `json`, `slice`, `keyvalue`, `async`.
+
+**Description:** `json` is invaluable for debugging. `slice` works on arrays and strings. `keyvalue` lets you iterate over object properties with `@for`. `async` unwraps Observables and Promises directly in the template.
+
+**Examples:**
+
+```ts
+import { JsonPipe, SlicePipe, KeyValuePipe, AsyncPipe } from '@angular/common';
+
+@Component({
+  standalone: true,
+  imports: [JsonPipe, SlicePipe, KeyValuePipe, AsyncPipe],
+  template: `
+    <!-- Debug any value -->
+    <pre>{{ user | json }}</pre>
+
+    <!-- First 3 items of an array -->
+    @for (item of items | slice:0:3; track item) { <p>{{ item }}</p> }
+
+    <!-- Iterate object entries -->
+    @for (entry of config | keyvalue; track entry.key) {
+      <p>{{ entry.key }}: {{ entry.value }}</p>
+    }
+
+    <!-- Unwrap a Promise or Observable -->
+    <p>{{ userData$ | async }}</p>
+  `,
+})
+export class DemoComponent {
+  user = { name: 'Alice', age: 30 };
+  items = ['a', 'b', 'c', 'd', 'e'];
+  config = { theme: 'dark', lang: 'en' };
+  userData$ = fetch('/api/user').then(r => r.json());
+}
+```
+
+---
+
+## 167. Building a First Custom Pipe
+
+**What is this:** Creating a standalone pipe class with `@Pipe`.
+
+**Description:** A pipe is a class decorated with `@Pipe` that implements `PipeTransform`. The `transform(value, ...args)` method receives the value and any arguments, and returns the transformed result. Add it to the component's `imports` to use it.
+
+**Examples:**
+
+```ts
+// temperature.pipe.ts
+import { Pipe, PipeTransform } from '@angular/core';
+
+@Pipe({
+  name: 'temperature',  // used as {{ value | temperature }}
+  standalone: true,
+})
+export class TemperaturePipe implements PipeTransform {
+  transform(value: number): string {
+    return `${value.toFixed(1)} °C`;
+  }
+}
+```
+
+```ts
+// Using it
+@Component({
+  standalone: true,
+  imports: [TemperaturePipe],
+  template: `<p>{{ temp | temperature }}</p>`,  // 36.6 °C
+})
+export class WeatherComponent {
+  temp = 36.6;
+}
+```
+
+---
+
+## 168. Using Custom Pipes to Perform Custom Transformations
+
+**What is this:** A more practical custom pipe — truncating long text.
+
+**Description:** Any transformation that would clutter a template expression is a good candidate for a pipe. Keeping the template declarative and the logic in the pipe class makes both easier to test and read.
+
+**Examples:**
+
+```ts
+// truncate.pipe.ts
+import { Pipe, PipeTransform } from '@angular/core';
+
+@Pipe({ name: 'truncate', standalone: true })
+export class TruncatePipe implements PipeTransform {
+  transform(value: string, limit = 50): string {
+    if (value.length <= limit) return value;
+    return value.slice(0, limit).trimEnd() + '…';
+  }
+}
+```
+
+```ts
+@Component({
+  standalone: true,
+  imports: [TruncatePipe],
+  template: `
+    <p>{{ description | truncate }}</p>        <!-- default 50 chars -->
+    <p>{{ description | truncate:20 }}</p>     <!-- 20 chars -->
+  `,
+})
+export class CardComponent {
+  description = 'This is a very long description that goes well beyond fifty characters.';
+}
+```
+
+---
+
+## 169. Accepting Parameters in Custom Pipes
+
+**What is this:** Passing one or more arguments to a custom pipe with `:arg` syntax.
+
+**Description:** Arguments after the first in `transform(value, arg1, arg2)` map to the `:arg1:arg2` template syntax. Each argument can have a default value. TypeScript types the parameters so callers know what to pass.
+
+**Examples:**
+
+```ts
+// temperature.pipe.ts — convert between units
+import { Pipe, PipeTransform } from '@angular/core';
+
+type TempUnit = 'C' | 'F' | 'K';
+
+@Pipe({ name: 'temperature', standalone: true })
+export class TemperaturePipe implements PipeTransform {
+  transform(value: number, fromUnit: TempUnit = 'C', toUnit: TempUnit = 'F'): string {
+    let result: number;
+
+    if (fromUnit === 'C' && toUnit === 'F') result = value * 9/5 + 32;
+    else if (fromUnit === 'F' && toUnit === 'C') result = (value - 32) * 5/9;
+    else result = value;
+
+    return `${result.toFixed(1)} °${toUnit}`;
+  }
+}
+```
+
+```html
+<p>{{ 100 | temperature:'C':'F' }}</p>   <!-- 212.0 °F -->
+<p>{{ 32 | temperature:'F':'C' }}</p>    <!-- 0.0 °C -->
+<p>{{ 37 | temperature }}</p>            <!-- 98.6 °F (defaults) -->
+```
+
+---
+
+## 170. Chaining Pipes & Being Aware of Limitations
+
+**What is this:** Applying multiple pipes in sequence and understanding operator precedence with parameters.
+
+**Description:** Pipes chain left to right — the output of one becomes the input of the next. When chaining a pipe that takes parameters, wrap the parameterized pipe in parentheses if the result feeds another pipe, to avoid ambiguity.
+
+**Examples:**
+
+```html
+<!-- Chain: format as date, then uppercase -->
+<p>{{ today | date:'fullDate' | uppercase }}</p>
+<!-- SUNDAY, JANUARY 5, 2025 -->
+
+<!-- Chain: truncate, then uppercase -->
+<p>{{ longText | truncate:30 | uppercase }}</p>
+
+<!-- Limitation: operator precedence -->
+<!-- This is parsed as: {{ (value | a) : (b | c) }} — wrong! -->
+<p>{{ value | a:b | c }}</p>
+
+<!-- Correct — a gets argument b, result goes to c -->
+<p>{{ (value | a:b) | c }}</p>
+```
+
+---
+
+## 171. Building a Pipe That Sorts Items
+
+**What is this:** A pipe that returns a sorted copy of an array.
+
+**Description:** Sorting is a classic pipe use case — keep the original array untouched and return a new sorted copy. This also illustrates why impurity matters: if the array reference doesn't change (e.g. `push()`), a pure pipe won't re-run.
+
+**Examples:**
+
+```ts
+// sort.pipe.ts
+import { Pipe, PipeTransform } from '@angular/core';
+
+@Pipe({ name: 'sort', standalone: true })
+export class SortPipe implements PipeTransform {
+  transform<T>(value: T[], key: keyof T, direction: 'asc' | 'desc' = 'asc'): T[] {
+    return [...value].sort((a, b) => {
+      const valA = a[key];
+      const valB = b[key];
+      if (valA < valB) return direction === 'asc' ? -1 : 1;
+      if (valA > valB) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+}
+```
+
+```html
+@for (task of tasks | sort:'dueDate':'asc'; track task.id) {
+  <p>{{ task.title }} — {{ task.dueDate }}</p>
+}
+```
+
+---
+
+## 172. Understanding How Pipes Are Executed
+
+**What is this:** When Angular re-runs a pipe's `transform` method.
+
+**Description:** Angular re-runs a **pure** pipe only when its input value reference changes — for primitives this means a new value, for objects/arrays this means a new reference. It does not deep-check object contents. This is why mutating an array in place (`push`, `splice`) won't trigger a pure pipe — the reference stays the same.
+
+**Examples:**
+
+```ts
+// Pure pipe — DOES NOT re-run when you mutate in place
+this.tasks.push(newTask);       // same array reference → pipe skips
+this.tasks = [...this.tasks, newTask]; // new reference → pipe re-runs ✓
+
+// This is why signal + spread is the correct pattern:
+addTask(task: Task) {
+  this.tasks.update(current => [...current, task]); // new array → pipe triggered
+}
+```
+
+---
+
+## 173. Pure & Impure Pipes
+
+**What is this:** The difference between pure pipes (default) and impure pipes, and when to use each.
+
+**Description:** A **pure** pipe runs only when its input reference changes — fast and efficient. An **impure** pipe (`pure: false`) runs on every change detection cycle — powerful but potentially slow. Use impure pipes only when you must react to internal mutations you can't avoid (rare).
+
+**Examples:**
+
+```ts
+// Pure pipe (default) — runs only on reference change
+@Pipe({ name: 'sort', standalone: true })
+export class SortPipe implements PipeTransform {
+  transform<T>(arr: T[], key: keyof T): T[] {
+    return [...arr].sort(...);
+  }
+}
+
+// Impure pipe — runs on every change detection tick
+@Pipe({
+  name: 'filterLive',
+  standalone: true,
+  pure: false,  // ← opt-in to impure
+})
+export class FilterLivePipe implements PipeTransform {
+  transform(items: string[], query: string): string[] {
+    return items.filter(i => i.includes(query));
+  }
+}
+// Warning: impure pipes can cause performance issues in large lists
+// Prefer signal-based filtering in the component class instead
+```
+
+---
+
+## 174. Pipe Limitations & When Not To Use Them
+
+**What is this:** When to avoid pipes and use component class logic or services instead.
+
+**Description:** Pipes are display-only transformations. Avoid pipes when: (1) the transformation is expensive and runs frequently (impure); (2) you need the transformed value in TypeScript logic, not just the template; (3) the transformation has side effects. For those cases, compute the value in the class as a `computed()` signal or a getter.
+
+**Examples:**
+
+```ts
+// Bad — async side effect in a pipe
+@Pipe({ name: 'fetchUser', standalone: true, pure: false })
+export class FetchUserPipe implements PipeTransform {
+  transform(id: string) {
+    return fetch(`/api/users/${id}`); // fires on every change detection — never do this
+  }
+}
+
+// Good — use async pipe with a signal or observable prepared in the class
+@Component({
+  standalone: true,
+  imports: [AsyncPipe],
+  template: `<p>{{ user$ | async }}</p>`,
+})
+export class UserComponent {
+  user$ = fetch('/api/user').then(r => r.json()); // prepared once in the class
+}
+
+// Best for filtering/sorting — computed signal, no pipe needed
+filteredTasks = computed(() =>
+  this.tasks().filter(t => t.title.includes(this.query()))
+);
+```
