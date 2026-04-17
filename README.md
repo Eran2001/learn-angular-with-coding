@@ -6,7 +6,7 @@
 
 ## 1. Welcome To The Course!
 
-**What is this:** An introduction to the Angular course, covering what you'll learn and how the course is structured.
+**What is this:** An introduction to the Angular course, covering what you'll learn and how the course is structured
 
 **Description:** The instructor walks through the course goals, prerequisites, and what to expect. Angular is a full-featured frontend framework maintained by Google, used for building scalable single-page applications.
 
